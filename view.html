@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Гонки на коляске с анимацией</title>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: monospace; }
+        canvas { display: block; }
+        
+        #hud {
+            position: absolute; top: 10px; left: 10px;
+            color: white; font-size: 16px;
+            background: rgba(0,0,0,0.7); padding: 10px; border-radius: 5px;
+            z-index: 10;
+        }
+        
+        #controls-hint {
+            position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%);
+            color: #ff0; font-size: 18px;
+            background: rgba(0,0,0,0.7); padding: 10px 20px; border-radius: 5px;
+            z-index: 10;
+        }
+    </style>
+</head>
+<body>
+    <div id="hud">
+        <div>Скорость: <span id="speed">0</span> км/ч</div>
+        <div>Анимация: <span id="anim">-</span></div>
+    </div>
+    <div id="controls-hint">W/S - движение, A/D - поворот</div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+        // ============ СЦЕНА ============
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87ceeb);
+
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ 
+            antialias: true,
+            alpha: false
+        });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        document.body.appendChild(renderer.domElement);
+
+        // ============ СВЕТ ============
+        scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+        const sun = new THREE.DirectionalLight(0xffffff, 0.8);
+        sun.position.set(50, 100, 50);
+        sun.castShadow = true;
+        sun.shadow.mapSize.set(2048, 2048);
+        sun.shadow.camera.left = -100;
+        sun.shadow.camera.right = 100;
+        sun.shadow.camera.top = 100;
+        sun.shadow.camera.bottom = -100;
+        scene.add(sun);
+
+        // ============ ПОЛ ============
+        const floor = new THREE.Mesh(
+            new THREE.PlaneGeometry(500, 500),
+            new THREE.MeshStandardMaterial({ color: 0x228b22 })
+        );
+        floor.rotation.x = -Math.PI / 2;
+        floor.receiveShadow = true;
+        scene.add(floor);
+
+        const grid = new THREE.GridHelper(500, 100);
+        grid.position.y = 0.01;
+        scene.add(grid);
+
+        // ============ ТРАССА ============
+        const track = new THREE.Mesh(
+            new THREE.PlaneGeometry(10, 200),
+            new THREE.MeshStandardMaterial({ color: 0x333333 })
+        );
+        track.rotation.x = -Math.PI / 2;
+        track.position.set(0, 0.02, 100);
+        track.receiveShadow = true;
+        scene.add(track);
+
+        const barrierMat = new THREE.MeshStandardMaterial({ color: 0xff0000 });
+        for (let z = 0; z < 200; z += 4) {
+            const left = new THREE.Mesh(new THREE.BoxGeometry(0.3, 1, 2), barrierMat);
+            left.position.set(-5.5, 0.5, z);
+            scene.add(left);
+            
+            const right = new THREE.Mesh(new THREE.BoxGeometry(0.3, 1, 2), barrierMat);
+            right.position.set(5.5, 0.5, z);
+            scene.add(right);
+        }
+
+        // ============ МОДЕЛЬ + АНИМАЦИЯ ============
+        let wheelchair = null;
+        let mixer = null; // AnimationMixer
+        let animations = {}; // Хранилище анимаций
+        let currentAnim = null;
+
+        const loader = new GLTFLoader();
+        loader.load(
+            'assets/models/women.glb', // 👈 Твоя анимированная модель
+            (gltf) => {
+                wheelchair = gltf.scene;
+                
+                // Размер и масштаб
+                const box = new THREE.Box3().setFromObject(wheelchair);
+                const size = box.getSize(new THREE.Vector3());
+                console.log('📏 Размер модели:', size);
+                
+                const scale = 2 / Math.max(size.x, size.y, size.z);
+                wheelchair.scale.setScalar(scale);
+                
+                const box2 = new THREE.Box3().setFromObject(wheelchair);
+                const center = box2.getCenter(new THREE.Vector3());
+                wheelchair.position.x -= center.x;
+                wheelchair.position.z -= center.z;
+                wheelchair.position.y -= box2.min.y;
+                
+                // 🔧 НАСТРОЙКА АНИМАЦИИ
+                if (gltf.animations && gltf.animations.length > 0) {
+                    console.log('✅ Найдено анимаций:', gltf.animations.length);
+                    
+                    // Создаём микшер для анимаций
+                    mixer = new THREE.AnimationMixer(wheelchair);
+                    
+                    // Сохраняем все анимации
+                    gltf.animations.forEach((clip, index) => {
+                        const animName = clip.name || `anim_${index}`;
+                        animations[animName] = mixer.clipAction(clip);
+                        console.log(`🎬 Анимация ${index}:`, animName, '| Длительность:', clip.duration.toFixed(2) + 's');
+                    });
+                    
+                    // Запускаем первую анимацию по умолчанию
+                    const firstAnim = Object.keys(animations)[0];
+                    playAnimation(firstAnim);
+                } else {
+                    console.warn('⚠️ Анимации не найдены в модели!');
+                    document.getElementById('anim').textContent = 'нет анимации';
+                }
+                
+                wheelchair.traverse((child) => {
+                    if (child.isMesh) {
+                        child.castShadow = true;
+                        child.receiveShadow = true;
+                        
+                        if (child.material) {
+                            child.material.transparent = false;
+                            child.material.opacity = 1.0;
+                            child.material.alphaTest = 0;
+                            child.material.side = THREE.FrontSide;
+                        }
+                    }
+                });
+                
+                scene.add(wheelchair);
+                console.log('✅ Модель загружена');
+            },
+            undefined,
+            (error) => {
+                console.error('❌ Ошибка:', error);
+                createFallback();
+            }
+        );
+
+        function createFallback() {
+            wheelchair = new THREE.Group();
+            
+            const body = new THREE.Mesh(
+                new THREE.BoxGeometry(0.8, 0.3, 1.5),
+                new THREE.MeshStandardMaterial({ color: 0xff0000 })
+            );
+            body.position.y = 0.6;
+            wheelchair.add(body);
+            
+            scene.add(wheelchair);
+        }
+
+        // 🔧 ФУНКЦИЯ ВОСПРОИЗВЕДЕНИЯ АНИМАЦИИ
+        function playAnimation(name) {
+            if (!animations[name]) {
+                console.warn('Анимация не найдена:', name);
+                return;
+            }
+            
+            // Останавливаем все анимации
+            Object.values(animations).forEach(anim => {
+                anim.stop();
+                anim.reset();
+            });
+            
+            // Запускаем нужную
+            animations[name].reset().play();
+            currentAnim = name;
+            document.getElementById('anim').textContent = name;
+            console.log('▶️ Запущена анимация:', name);
+        }
+
+        // ============ УПРАВЛЕНИЕ ============
+        const keys = {};
+        window.addEventListener('keydown', (e) => {
+            keys[e.code] = true;
+            
+            // 🔧 Переключение анимаций клавишами 1, 2, 3...
+            if (e.key >= '1' && e.key <= '9') {
+                const animKeys = Object.keys(animations);
+                const index = parseInt(e.key) - 1;
+                if (animKeys[index]) {
+                    playAnimation(animKeys[index]);
+                }
+            }
+        });
+        window.addEventListener('keyup', (e) => keys[e.code] = false);
+
+        // ============ ФИЗИКА ИГРОКА ============
+        const player = {
+            position: new THREE.Vector3(0, 0, 0),
+            rotation: 0,
+            targetRotation: 0,
+            speed: 0,
+            maxSpeed: 30,
+            acceleration: 10,
+            friction: 0.96,
+            turnSpeed: 1.2
+        };
+
+        // ============ АНИМАЦИЯ ============
+        const clock = new THREE.Clock();
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const dt = Math.min(clock.getDelta(), 0.1);
+
+            //  ОБНОВЛЕНИЕ АНИМАЦИИ
+            if (mixer) {
+                mixer.update(dt);
+            }
+
+            // Управление
+            if (keys['KeyW']) {
+                const boost = keys['ShiftLeft'] || keys['ShiftRight'] ? 1.5 : 1;
+                player.speed += player.acceleration * boost * dt;
+                
+                // 🔧 Можно переключить на анимацию движения если есть
+                // if (animations['Walk'] || animations['Run']) {
+                //     playAnimation(animations['Walk'] ? 'Walk' : 'Run');
+                // }
+            }
+            if (keys['KeyS']) {
+                player.speed -= player.acceleration * 0.5 * dt;
+            }
+            
+            if (Math.abs(player.speed) > 0.5) {
+                if (keys['KeyA']) {
+                    player.targetRotation += player.turnSpeed * dt;
+                }
+                if (keys['KeyD']) {
+                    player.targetRotation -= player.turnSpeed * dt;
+                }
+                
+                let diff = player.targetRotation - player.rotation;
+                while (diff > Math.PI) diff -= Math.PI * 2;
+                while (diff < -Math.PI) diff += Math.PI * 2;
+                
+                player.rotation += diff * 5 * dt;
+            }
+
+            player.speed *= player.friction;
+            if (player.speed > player.maxSpeed) player.speed = player.maxSpeed;
+            if (player.speed < -player.maxSpeed / 2) player.speed = -player.maxSpeed / 2;
+            if (Math.abs(player.speed) < 0.05) player.speed = 0;
+
+            player.position.x += Math.sin(player.rotation) * player.speed * dt;
+            player.position.z += Math.cos(player.rotation) * player.speed * dt;
+
+            if (wheelchair) {
+                wheelchair.position.copy(player.position);
+                wheelchair.rotation.y = player.rotation + Math.PI;
+            }
+
+            const cameraOffset = new THREE.Vector3(2.5, 3.5, -7);
+            cameraOffset.applyAxisAngle(new THREE.Vector3(0, 1, 0), player.rotation);
+            
+            const targetPos = player.position.clone().add(cameraOffset);
+            camera.position.lerp(targetPos, 0.08);
+            
+            const lookAhead = new THREE.Vector3(
+                Math.sin(player.rotation) * 5,
+                1,
+                Math.cos(player.rotation) * 5
+            );
+            const lookAt = player.position.clone().add(lookAhead);
+            camera.lookAt(lookAt);
+
+            document.getElementById('speed').textContent = (Math.abs(player.speed) * 3.6).toFixed(1);
+
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        animate();
+    </script>
+</body>
+</html>
