@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wheelchair Racing</title>
+  <link rel="stylesheet" href="styles/main.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div id="hud">
+    <div id="speed">0 км/ч</div>
+    <div id="timer">00:00.00</div>
+    <div id="best-time">Лучшее: --:--.--</div>
+    <div id="lap-counter"></div>
+  </div>
+
+  <div id="countdown-overlay"></div>
+  <div id="status-overlay"></div>
+
+  <div id="track-selector">
+    <h1>🏁 WHEELCHAIR RACING 🦽</h1>
+    <h2>Выбери трассу:</h2>
+    <div class="track-options">
+      <button class="track-btn" data-track="straight">
+        <div class="track-preview">━━━━━</div>
+        <div class="track-name">Прямая</div>
+        <div class="track-desc">100 м · бустер · трамплин</div>
+      </button>
+      <button class="track-btn" data-track="l-shape">
+        <div class="track-preview">━━━┓<br>&nbsp;&nbsp;&nbsp;&nbsp;┃</div>
+        <div class="track-name">L-образная</div>
+        <div class="track-desc">200 м · поворот 90°</div>
+      </button>
+      <button class="track-btn" data-track="circular">
+        <div class="track-preview"> ╭──╮<br> │&nbsp;&nbsp;│<br> ╰──╯</div>
+        <div class="track-name">Кольцо</div>
+        <div class="track-desc">Круг 380 м · 1-3 круга</div>
+      </button>
+      <button class="track-btn" data-track="complex">
+        <div class="track-preview">━━┓<br>&nbsp;&nbsp;&nbsp;┣━┓<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;┃</div>
+        <div class="track-name">Сложная</div>
+        <div class="track-desc">2 поворота · 200 м</div>
+      </button>
+    </div>
+  </div>
+
+  <div id="laps-selector">
+    <h1>🔄 Кольцевая трасса</h1>
+    <h2>Сколько кругов проехать?</h2>
+    <div class="laps-options">
+      <button class="laps-btn" data-laps="1">1 круг</button>
+      <button class="laps-btn" data-laps="2">2 круга</button>
+      <button class="laps-btn" data-laps="3">3 круга</button>
+    </div>
+    <button id="back-to-tracks">← Назад к трассам</button>
+  </div>
+
+  <div id="difficulty-selector">
+    <h1>⚙️ Сложность соперника</h1>
+    <h2>Выбери уровень бота:</h2>
+    <div class="difficulty-options">
+      <button class="diff-btn" data-diff="easy">
+        <div class="diff-name">🟢 Легко</div>
+        <div class="diff-desc">Скорость 80%</div>
+      </button>
+      <button class="diff-btn" data-diff="medium">
+        <div class="diff-name">🟡 Средне</div>
+        <div class="diff-desc">Скорость 100%</div>
+      </button>
+      <button class="diff-btn" data-diff="hard">
+        <div class="diff-name">🔴 Сложно</div>
+        <div class="diff-desc">Скорость 125%</div>
+      </button>
+    </div>
+  </div>
+
+  <div id="loading">Загрузка...</div>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
